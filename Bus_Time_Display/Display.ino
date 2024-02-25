@@ -1,7 +1,9 @@
+// Define the pins used for each connection
 #define CLK 21
 #define SO 15
 int ROWS[] = {19,18,5,17,16,4,2};
 
+// Define the font
 #define LETTER_WIDTH 7
 uint8_t FONT[][LETTER_WIDTH] {
 {0x00,0x00,0x00,0x00,0x00,0x00}, //  
@@ -64,7 +66,7 @@ uint8_t FONT[][LETTER_WIDTH] {
 {0x22,0x14,0x08,0x08,0x08,0x08}, // Y
 {0x3E,0x04,0x08,0x10,0x20,0x3E}, // Z
 {0x0C,0x08,0x08,0x08,0x08,0x0C}, // [
-{0x10,0x10,0x08,0x08,0x04,0x04}, // \ <-- backslash (I can't put that at the end of a comment without the Arduino IDE treating it as a linebreak escape and commenting out the next line of code LOL)
+{0x10,0x10,0x08,0x08,0x04,0x04}, // \ <-- backslash (I can't put that at the end of a comment without the C standard treating it as a linebreak escape and commenting out the next line of code LOL)
 {0x18,0x08,0x08,0x08,0x08,0x18}, // ]
 {0x08,0x14,0x14,0x00,0x00,0x00}, // ^
 {0x00,0x00,0x00,0x00,0x00,0x3E}, // _
@@ -100,12 +102,15 @@ uint8_t FONT[][LETTER_WIDTH] {
 {0x10,0x08,0x0C,0x08,0x08,0x10}  // }
 };
 
+// 96-bit buffer to store the data before it is written to the display
 uint32_t message_bits[] = {0,0,0};
 
+// Calculate the index into the font array given the character
 uint8_t font_index(char c) {
   return c-32;
 }
 
+// Pack a row of bits to display
 void pack_message_bits(int row, int col_offset) {
   message_bits[0] = 0;
   message_bits[1] = 0;
@@ -120,13 +125,25 @@ void pack_message_bits(int row, int col_offset) {
       continue;
     }
     if(shift_amt >= 0) {
-      message_bits[mbits_i] |= ((uint32_t) FONT[font_index(message.charAt(i))][row]) << shift_amt;
+      if(i < message.length()) {
+        message_bits[mbits_i] |= ((uint32_t) FONT[font_index(message.charAt(i))][row]) << shift_amt;
+      } else {
+        message_bits[mbits_i] |= ((uint32_t) FONT[font_index(' ')][row]) << shift_amt;
+      }
     } else {
-      message_bits[mbits_i] |= ((uint32_t) FONT[font_index(message.charAt(i))][row]) >> -shift_amt;
+      if(i < message.length()) {
+        message_bits[mbits_i] |= ((uint32_t) FONT[font_index(message.charAt(i))][row]) >> -shift_amt;
+      } else {
+        message_bits[mbits_i] |= ((uint32_t) FONT[font_index(' ')][row]) >> -shift_amt;
+      }
       mbits_i++;
       if(mbits_i <= 2) {
         shift_amt = bits_left - (32 * (2-mbits_i)) - 7;
-        message_bits[mbits_i] |= ((uint32_t) FONT[font_index(message.charAt(i))][row]) << shift_amt;
+        if(i < message.length()) {
+          message_bits[mbits_i] |= ((uint32_t) FONT[font_index(message.charAt(i))][row]) << shift_amt;
+        } else {
+          message_bits[mbits_i] |= ((uint32_t) FONT[font_index(' ')][row]) << shift_amt;
+        }
       }
     }
     bits_left -= 7;
@@ -145,9 +162,11 @@ void setup_display() {
 }
 
 void draw_display(int col_offset) {
+  // Display each row in succession
   for (int row = 0; row < 7; row++) {
     pack_message_bits(row, col_offset);
 
+    // Shift the bits out to the display
     for(int i = 0; i < 3; i++) {
       for(int j = 31; j >= 0; j--) {
         digitalWrite(SO, ((message_bits[i]) >> j) & 1);
@@ -159,6 +178,7 @@ void draw_display(int col_offset) {
       }
     }
 
+    // Enable the row for some amount of time
     digitalWrite(ROWS[row], HIGH);
     delayMicroseconds(200);
     digitalWrite(ROWS[row], LOW);
