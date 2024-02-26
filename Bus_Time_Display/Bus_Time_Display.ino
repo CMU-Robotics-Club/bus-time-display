@@ -58,7 +58,7 @@ void loop() {
   uint32_t reset_time = millis();
   uint32_t hold_stop = millis();
   // Loop for refresh_time milliseconds but don't cut off the scroll animation
-  while(millis() - hold_init < refresh_time || (!(millis() < hold_stop && millis() - reset_time > hold_time))) {
+  while(millis() - hold_init < refresh_time || !(millis() < hold_stop && millis() - reset_time > hold_time)) {
     // Number of columns to offset the message 
     int col_offset = 0;
     if(message.length() > 14 || (message.length() == 14 && message[13] != ' ')) {
@@ -72,6 +72,8 @@ void loop() {
           reset_time = millis() + hold_time;
         }
       }
+    } else if(millis() - hold_init >= refresh_time) {
+      break;
     }
     // Draw the message to the display with the calculated col_offset
     draw_display(col_offset);

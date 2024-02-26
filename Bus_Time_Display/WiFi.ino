@@ -140,7 +140,7 @@ void get_predictions() {
 }
 
 void setup_wifi() {
-  WiFiMulti.addAP(network_ssid, network_pass);
+  WiFiMulti.addAP(network_ssid.c_str(), network_pass.c_str());
   
   while(WiFiMulti.run() != WL_CONNECTED) {
     delay(500);
