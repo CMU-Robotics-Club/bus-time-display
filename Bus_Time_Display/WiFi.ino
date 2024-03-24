@@ -61,9 +61,7 @@ void get_time() {
   }
 }
 
-void get_predictions() {
-  get_time();
-  
+void get_predictions(bool refresh_eastbound) {
   const uint16_t port = 80;
   const char *host = "realtime.portauthority.org";
   WiFiClient client;
@@ -74,8 +72,14 @@ void get_predictions() {
   }
 
   // Send the request to the server (with the secret api_key)
+  String request_params = "";
+  if(refresh_eastbound) {
+    request_params = "rt=61A,61B,61C,61D,67,69&stpid=7117";
+  } else {
+    request_params = "rt=28X,58,61A,61B,61C,61D,67,69&stpid=4407";
+  }
   client.print(
-    "GET /bustime/api/v3/getpredictions?top=8&rt=61A,61B,61C,61D&stpid=7117&tmres=s&rtpidatafeed=Port%20Authority%20Bus&key=" + api_key + "&format=json HTTP/1.1\n"
+    "GET /bustime/api/v3/getpredictions?top=8&" + request_params + "&tmres=s&rtpidatafeed=Port%20Authority%20Bus&key=" + api_key + "&format=json HTTP/1.1\n"
     "Host: realtime.portauthority.org\n"
     "User-Agent: python-requests/2.31.0\n"
     "Connection: keep-alive\n\n"
@@ -104,14 +108,14 @@ void get_predictions() {
     JSONVar parsed_json = JSON.parse(json_str);
     if(JSON.typeof(parsed_json) != "undefined") {
       for(int i = 0; i < 8; i++) {
-        bus_names[i] = "";
-        bus_times[i] = -1;
+        bus_names[refresh_eastbound][i] = "";
+        bus_times[refresh_eastbound][i] = -1;
       }
       
       for(int i = 0; i < min(parsed_json["bustime-response"]["prd"].length(), 8); i++) {
         if(((int)parsed_json["bustime-response"]["prd"][i]["dyn"]) != 0) continue;
         // Set the bus name
-        bus_names[i] = (const char*)(parsed_json["bustime-response"]["prd"][i]["rtdd"]);
+        bus_names[refresh_eastbound][i] = (const char*)(parsed_json["bustime-response"]["prd"][i]["rtdd"]);
 
         // Extract the prediction time as a string
         String time_str = (String)(const char*)parsed_json["bustime-response"]["prd"][i]["prdtm"];
@@ -126,7 +130,7 @@ void get_predictions() {
 
         // Convert to minutes and set the array
         t_left /= 60;
-        bus_times[i] = t_left;
+        bus_times[refresh_eastbound][i] = t_left;
       }
       bus_error = 0;
     } else {

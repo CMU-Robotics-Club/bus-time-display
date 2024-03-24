@@ -1,6 +1,6 @@
 String message = "              ";
-String bus_names[] = {"","","","","","","",""};
-int bus_times[] = {0,0,0,0,0,0,0,0};
+String bus_names[][8] = {{"","","","","","","",""}, {"","","","","","","",""}};
+int bus_times[][8] = {{0,0,0,0,0,0,0,0}, {0,0,0,0,0,0,0,0}};
 
 // 0 == good
 // 1 == connection failed
@@ -8,8 +8,13 @@ int bus_times[] = {0,0,0,0,0,0,0,0};
 int bus_error = 1;
 
 // Update the message string given the bus_names, bus_times, and bus_error
-void set_message() {
+void set_message(bool display_eastbound) {
   message = "";
+  if(display_eastbound) {
+    message = "EAST ";
+  } else {
+    message = "WEST ";
+  }
 
   // If there is an error, set the message to that so it is visible
   if(bus_error != 0) {
@@ -25,9 +30,9 @@ void set_message() {
 
   // If there was no error, display the bus names and times
   for(int i = 0; i < 8; i++) {
-    if(bus_times[i] == -1) break;
+    if(bus_times[display_eastbound][i] == -1) break;
     if(i > 0) message.concat("  ");
-    message.concat(bus_names[i] + "-" + String(bus_times[i]) + " min");
+    message.concat(bus_names[display_eastbound][i] + "-" + String(bus_times[display_eastbound][i]) + "min");
   }
 
   // Pad the message with spaces in the case
@@ -38,44 +43,84 @@ void set_message() {
   }
 }
 
+enum {
+  REFRESH,
+  IDLE_START,
+  SCROLLING,
+  IDLE_STOP,
+} system_state;
+bool displaying_eastbound = true;
+
 void setup() {
   setup_display();
   setup_wifi();
+  system_state = REFRESH;
   delay(1000);
 }
 
-int hold_time = 3000; // ms to hold at start and end of message
-int scroll_speed = 40; // ms per column
-int refresh_time = 30000; // ms to display between refreshes
+int hold_time = 2000; // ms to hold at start and end of message
+int scroll_speed = 30; // ms per column
+int display_number = 1; // Number of times to display each message before refreshing
+int min_refresh_time = 30000;
+
+uint32_t last_refresh_time = 0;
+uint32_t t_hold = 0;
+int display_count = 0;
 
 void loop() {
-  // Get the bus predictions over wifi and update bus_names, bus_times, and bus_error
-  get_predictions();
-  // Write the result to the message string to be displayed
-  set_message();
-
-  uint32_t hold_init = millis();
-  uint32_t reset_time = millis();
-  uint32_t hold_stop = millis();
-  // Loop for refresh_time milliseconds but don't cut off the scroll animation
-  while(millis() - hold_init < refresh_time || !(millis() < hold_stop && millis() - reset_time > hold_time)) {
-    // Number of columns to offset the message 
-    int col_offset = 0;
-    if(message.length() > 14 || (message.length() == 14 && message[13] != ' ')) {
-      // Scroll because message is too long
-      if(millis() < hold_stop) {
-        col_offset = (7 * message.length()) - 95;
-      } else if(millis() - reset_time > hold_time) {
-        col_offset = (millis() - reset_time - hold_time) / scroll_speed;
-        if(col_offset >= (7 * message.length()) - 95) {
-          hold_stop = millis() + hold_time;
-          reset_time = millis() + hold_time;
-        }
-      }
-    } else if(millis() - hold_init >= refresh_time) {
+  uint32_t t = millis();
+  int col_offset = 0;
+  switch(system_state) {
+    case REFRESH:
+      // Get the bus predictions over wifi and update bus_names, bus_times, and bus_error
+      get_predictions(true);
+      get_predictions(false);
+      get_time();
+      
+      // Write the result to the message string to be displayed
+      displaying_eastbound = true;
+      set_message(displaying_eastbound);
+      system_state = IDLE_START;
+      t_hold = millis();
       break;
-    }
-    // Draw the message to the display with the calculated col_offset
-    draw_display(col_offset);
-  }
+    case IDLE_START:
+      if(t >= t_hold + hold_time) {
+        t_hold = t;
+        system_state = SCROLLING;
+      } else {
+        draw_display(0);
+      }
+      break;
+    case SCROLLING:
+      col_offset = (t - t_hold) / scroll_speed;
+      if(col_offset >= (7 * message.length()) - 95) {
+        t_hold = t;
+        system_state = IDLE_STOP;
+      } else {
+        draw_display(col_offset);
+      }
+      break;
+    case IDLE_STOP:
+      if(t >= t_hold + hold_time) {
+        t_hold = t;
+        if(displaying_eastbound) {
+          system_state = IDLE_START;
+          displaying_eastbound = false;
+          set_message(displaying_eastbound);
+        } else {
+          display_count++;
+          if(display_count >= display_number && t >= last_refresh_time + min_refresh_time) {
+            system_state = REFRESH;
+            display_count = 0;
+          } else {
+            system_state = IDLE_START;
+            displaying_eastbound = true;
+            set_message(displaying_eastbound);
+          }
+        }
+      } else {
+        draw_display((7 * message.length()) - 95);
+      }
+      break;
+  };
 }
