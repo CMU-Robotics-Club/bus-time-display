@@ -73,9 +73,9 @@ void loop() {
   switch(system_state) {
     case REFRESH:
       // Get the bus predictions over wifi and update bus_names, bus_times, and bus_error
+      get_time();
       get_predictions(true);
       get_predictions(false);
-      get_time();
       
       // Write the result to the message string to be displayed
       displaying_eastbound = true;
